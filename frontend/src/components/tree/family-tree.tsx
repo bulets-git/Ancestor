@@ -50,9 +50,9 @@ import { toast } from 'sonner';
 // Constants
 // ═══════════════════════════════════════════════════════════════════════════
 
-const NODE_WIDTH = 120;
-const NODE_HEIGHT = 80;
-const LEVEL_HEIGHT = 140;
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 100;
+const LEVEL_HEIGHT = 165;
 const SIBLING_GAP = 20;
 const BRANCH_GAP = 60; // wider gap between siblings whose subtrees have children
 const MINIMAP_WIDTH = 160;
@@ -94,62 +94,133 @@ interface TreeNodeProps {
   isSelected: boolean;
 }
 
+/** Split a Vietnamese full name into at most 2 SVG text lines */
+function wrapName(name: string, charsPerLine = 18): [string, string | null] {
+  const words = name.split(' ');
+  let line1 = '';
+  let i = 0;
+  for (; i < words.length; i++) {
+    const next = line1 ? `${line1} ${words[i]}` : words[i];
+    if (next.length > charsPerLine && line1) break;
+    line1 = next;
+  }
+  if (i >= words.length) return [line1, null];
+  const remaining = words.slice(i).join(' ');
+  const line2 = remaining.length > charsPerLine
+    ? remaining.substring(0, charsPerLine - 1) + '\u2026'
+    : remaining;
+  return [line1, line2];
+}
+
 function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProps) {
   const { person, x, y, isCollapsed, hasChildren } = node;
-  
-  const initials = person.display_name
-    .split(' ')
-    .map((n) => n[0])
-    .slice(-2)
-    .join('')
-    .toUpperCase();
 
-  const genderColor = person.gender === 1 ? 'border-blue-400' : 'border-pink-400';
-  const selectedRing = isSelected ? 'ring-2 ring-primary ring-offset-2' : '';
+  // Pure SVG — no foreignObject, so html2canvas / PDF serialisation works correctly
+  const isMale = person.gender === 1;
+  // Hardcoded hex colours (not CSS vars) so they survive SVG serialisation for PDF
+  const nodeBg      = isMale ? '#eff6ff' : '#fff1f2';   // blue-50 / rose-50
+  const nodeBorder  = isSelected ? '#6366f1' : (isMale ? '#93c5fd' : '#fda4af'); // indigo / blue-300 / rose-300
+  const borderWidth = isSelected ? 2.5 : 1.5;
+  const avatarBg    = isMale ? '#bfdbfe' : '#fecdd3';   // blue-200 / rose-200
+  const textFill    = '#1f2937';  // gray-800
+  const mutedFill   = '#6b7280';  // gray-500
+  const btnBorder   = isMale ? '#93c5fd' : '#fda4af';
+
+  // Last word initial for avatar
+  const words = person.display_name.trim().split(' ');
+  const initial = (words[words.length - 1]?.[0] ?? '?').toUpperCase();
+
+  // Name wrapping
+  const [line1, line2] = wrapName(person.display_name);
+  const cx = x + NODE_WIDTH / 2;
+
+  // Vertical layout within the node
+  const avatarCY  = y + 24;
+  const avatarR   = 13;
+  const nameLine1Y = line2 ? y + 50 : y + 56; // shift down a bit when 1-line name
+  const nameLine2Y = y + 65;
+  const deadY      = y + NODE_HEIGHT - 9;
+
+  // Collapse button (centre at bottom edge of node)
+  const btnCY = y + NODE_HEIGHT;
+  const btnR  = 9;
+
+  const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 
   return (
     <motion.g
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
-      transition={{ duration: 0.3 }}
+      style={{ transformOrigin: `${cx}px ${y + NODE_HEIGHT / 2}px` }}
+      transition={{ duration: 0.25 }}
     >
-      <foreignObject x={x} y={y} width={NODE_WIDTH} height={NODE_HEIGHT}>
-        <div
-          className={`h-full bg-card border-2 ${genderColor} ${selectedRing} rounded-lg shadow-sm cursor-pointer hover:shadow-md transition-all p-2 flex flex-col items-center justify-center relative`}
-          onClick={() => onSelect(person)}
-        >
-          <Avatar className="h-8 w-8 mb-1">
-            <AvatarImage src={person.avatar_url} />
-            <AvatarFallback className="text-xs">
-              {initials || <User className="h-3 w-3" />}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-xs font-medium text-center line-clamp-2 leading-tight">
-            {person.display_name}
-          </span>
-          {!person.is_living && (
-            <span className="text-[10px] text-muted-foreground">†</span>
-          )}
-          
-          {/* Collapse/Expand button */}
-          {hasChildren && (
-            <button
-              className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-background border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors z-10"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleCollapse(person.id);
-              }}
-            >
-              {isCollapsed ? (
-                <ChevronRight className="h-3 w-3" />
-              ) : (
-                <ChevronDown className="h-3 w-3" />
-              )}
-            </button>
-          )}
-        </div>
-      </foreignObject>
+      {/* Card background */}
+      <rect
+        x={x} y={y} width={NODE_WIDTH} height={NODE_HEIGHT}
+        rx={8} fill={nodeBg} stroke={nodeBorder} strokeWidth={borderWidth}
+        style={{ cursor: 'pointer' }}
+        onClick={() => onSelect(person)}
+      />
+
+      {/* Avatar circle */}
+      <circle cx={cx} cy={avatarCY} r={avatarR} fill={avatarBg}
+        style={{ cursor: 'pointer' }} onClick={() => onSelect(person)} />
+      <text x={cx} y={avatarCY + 5} textAnchor="middle"
+        fontSize={13} fontWeight="700" fill={textFill} fontFamily={FONT}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => onSelect(person)}>
+        {initial}
+      </text>
+
+      {/* Name line 1 */}
+      <text x={cx} y={nameLine1Y} textAnchor="middle"
+        fontSize={11} fontWeight="500" fill={textFill} fontFamily={FONT}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => onSelect(person)}>
+        {line1}
+      </text>
+
+      {/* Name line 2 (if any) */}
+      {line2 && (
+        <text x={cx} y={nameLine2Y} textAnchor="middle"
+          fontSize={11} fontWeight="500" fill={textFill} fontFamily={FONT}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => onSelect(person)}>
+          {line2}
+        </text>
+      )}
+
+      {/* Death indicator */}
+      {!person.is_living && (
+        <text x={cx} y={deadY} textAnchor="middle"
+          fontSize={9} fill={mutedFill} fontFamily={FONT}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => onSelect(person)}>
+          {`\u2020 ${person.death_year ?? ''}`}
+        </text>
+      )}
+
+      {/* Selected dashed ring */}
+      {isSelected && (
+        <rect x={x - 3} y={y - 3} width={NODE_WIDTH + 6} height={NODE_HEIGHT + 6}
+          rx={11} fill="none" stroke="#6366f1" strokeWidth={1.5}
+          strokeDasharray="5 3" opacity={0.6} style={{ pointerEvents: 'none' }} />
+      )}
+
+      {/* Collapse / expand button */}
+      {hasChildren && (
+        <g style={{ cursor: 'pointer' }}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(person.id); }}>
+          <circle cx={cx} cy={btnCY} r={btnR}
+            fill="white" stroke={btnBorder} strokeWidth={1.5} />
+          <text x={cx} y={btnCY + 5} textAnchor="middle"
+            fontSize={14} fontWeight="bold" fill={mutedFill} fontFamily={FONT}
+            style={{ userSelect: 'none' }}>
+            {isCollapsed ? '+' : '\u2212'}
+          </text>
+        </g>
+      )}
     </motion.g>
   );
 }
@@ -165,36 +236,20 @@ interface TreeConnectionProps {
 function TreeConnection({ connection }: TreeConnectionProps) {
   const { x1, y1, x2, y2, type } = connection;
 
+  // Use hardcoded hex colours (not CSS vars / currentColor) so PDF serialisation works
   if (type === 'couple') {
     return (
-      <motion.line
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 0.5 }}
-        x1={x1}
-        y1={y1}
-        x2={x2}
-        y2={y2}
-        stroke="currentColor"
-        strokeWidth={2}
-        className="text-pink-400"
-      />
+      <line x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke="#f472b6" strokeWidth={2} /> // pink-400
     );
   }
 
-  // Parent-child: draw stepped line
+  // Parent-child: stepped path
   const midY = y1 + (y2 - y1) / 2;
   return (
-    <motion.path
-      initial={{ pathLength: 0 }}
-      animate={{ pathLength: 1 }}
-      transition={{ duration: 0.5 }}
+    <path
       d={`M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      className="text-muted-foreground"
-    />
+      fill="none" stroke="#9ca3af" strokeWidth={1.5} /> // gray-400
   );
 }
 
@@ -674,12 +729,13 @@ export function FamilyTree() {
 
     setIsExportingPdf(true);
     try {
-      await exportTreeToPdf(containerRef.current, {
+      await exportTreeToPdf(containerRef.current, layout.width, layout.height, layout.offsetX, {
         pageSize: layout.nodes.length > 30 ? 'a2' : 'a3',
       });
       toast.success('Xuất PDF thành công');
-    } catch {
-      toast.error('Lỗi khi xuất PDF');
+    } catch (err) {
+      console.error('[PDF export]', err);
+      toast.error('Lỗi khi xuất PDF. Vui lòng thử lại.');
     } finally {
       setIsExportingPdf(false);
     }

@@ -5,8 +5,8 @@
 
 CREATE TABLE IF NOT EXISTS clan_settings (
   id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  clan_name        VARCHAR(200) NOT NULL DEFAULT 'Họ Đặng',
-  clan_full_name   VARCHAR(500) NOT NULL DEFAULT 'Họ Đặng làng Kỷ Các',
+  clan_name        VARCHAR(200) NOT NULL DEFAULT 'Họ Nguyễn Quốc',
+  clan_full_name   VARCHAR(500) NOT NULL DEFAULT 'Họ Nguyễn Quốc làng Sa Long, xã Hà Linh, huyện Hương Khê, tỉnh Hà Tĩnh',
   clan_founding_year INTEGER,
   clan_origin      VARCHAR(500),
   clan_patriarch   VARCHAR(200),
@@ -18,8 +18,14 @@ CREATE TABLE IF NOT EXISTS clan_settings (
 );
 
 -- Seed one default row (singleton) using a fixed UUID so ON CONFLICT is meaningful
-INSERT INTO clan_settings (id, clan_name, clan_full_name)
-  VALUES ('00000000-0000-0000-0000-000000000001', 'Họ Đặng', 'Họ Đặng làng Kỷ Các')
+INSERT INTO clan_settings (id, clan_name, clan_full_name, clan_origin, clan_patriarch)
+  VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    'Họ Nguyễn Quốc',
+    'Họ Nguyễn Quốc làng Sa Long, xã Hà Linh, huyện Hương Khê, tỉnh Hà Tĩnh',
+    'Yên Nhân Thôn, Dương Luật xã, Thạch Hà phủ (nay là Thôn Minh Hải, xã Thạch Hải, huyện Thạch Hà, tỉnh Hà Tĩnh)',
+    'Nguyễn Quốc Thắng'
+  )
   ON CONFLICT (id) DO NOTHING;
 
 -- ─── RLS ─────────────────────────────────────────────────────────────────────
