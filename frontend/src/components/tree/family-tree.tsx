@@ -116,7 +116,6 @@ interface TreeButtonData {
 interface TreeNodeProps {
   node: TreeNodeData;
   onSelect: (person: Person) => void;
-  onToggleCollapse: (personId: string) => void;
   isSelected: boolean;
 }
 
@@ -458,7 +457,7 @@ function buildTreeLayout(
   const visiblePeople = people.filter((p) => visibleIds.has(p.id));
 
   if (visiblePeople.length === 0) {
-    return { nodes: [], connections: [], width: 0, height: 0, offsetX: 0 };
+    return { nodes: [], connections: [], buttons: [], width: 0, height: 0, offsetX: 0 };
   }
 
   // Helpers
