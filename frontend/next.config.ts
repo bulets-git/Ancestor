@@ -1,5 +1,6 @@
 // Trigger restart
 import type { NextConfig } from "next";
+import path from "path";
 
 // Standalone output required for Electron desktop builds AND Docker production.
 // Web deploys (Vercel) leave this undefined = default SSR behavior.
@@ -9,6 +10,9 @@ const isStandaloneMode =
 
 const nextConfig: NextConfig = {
   output: isStandaloneMode ? 'standalone' : undefined,
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
 
   // Ensure sql.js WASM binary is included in standalone output file tracing.
   // Without this, Next.js tree-shaking may exclude the .wasm file.

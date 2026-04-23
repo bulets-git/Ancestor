@@ -19,7 +19,7 @@ export default function LandingLayout({
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/welcome" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <span className="text-xl">🌳</span>
               <span className="font-semibold text-gray-900">AncestorTree</span>
             </Link>

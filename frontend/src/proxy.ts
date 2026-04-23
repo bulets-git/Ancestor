@@ -24,6 +24,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { buildMfaRedirectPath, getPostAuthNext, requiresMfaChallenge } from '@/lib/mfa-redirect';
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 
@@ -73,8 +74,8 @@ function _checkRateLimit(ip: string, pathname: string): { allowed: boolean; retr
   return { allowed: true, retryAfterSec: 0 };
 }
 
-// Public paths: accessible without authentication (auth pages + landing + debug)
-const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/welcome', '/council', '/ancestral-hall', '/register-member', '/api/debug', '/api/cron'];
+// Public paths: accessible without authentication (auth pages + debug)
+const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/auth', '/api/debug', '/api/cron'];
 // Auth pages only: authenticated users are redirected away from these (not from /welcome or /api/*)
 const authPagePaths = ['/login', '/register', '/forgot-password', '/reset-password'];
 // Accessible when authenticated but NOT yet verified by admin
@@ -128,6 +129,24 @@ const dockerFetch = makeDockerAwareFetch();
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requiresAuthenticatedPage =
+    pathname === pendingVerificationPath ||
+    authRequiredPaths.some(path => pathname.startsWith(path));
+  
+  // Debug log for EVERY request hitting the middleware
+  console.log(`[MW] Request: ${pathname} | Query: ${request.nextUrl.search}`);
+
+  // Redirect /welcome to / (user doesn't want to use welcome page)
+  // Check for both /welcome and /welcome/ (robustness)
+  if (pathname === '/welcome' || pathname === '/welcome/' || pathname.startsWith('/welcome/')) {
+    const search = request.nextUrl.search;
+    if (request.nextUrl.searchParams.has('code')) {
+      console.log(`[MW] Found auth code on welcome, redirecting to /auth/callback`);
+      return NextResponse.redirect(new URL(`/auth/callback${search}`, request.url));
+    }
+    console.log(`[MW] Redirecting welcome to /`);
+    return NextResponse.redirect(new URL(`/${search}`, request.url));
+  }
 
   // Desktop mode: bypass all auth — single-user admin, no Supabase Auth
   if (process.env.NEXT_PUBLIC_DESKTOP_MODE === 'true') {
@@ -249,19 +268,43 @@ export async function proxy(request: NextRequest) {
   }
 
   // Redirect unauthenticated users from protected pages
-  if (!user && authRequiredPaths.some(path => pathname.startsWith(path))) {
-    // Root path → landing page (not login) so visitors can see what the app is about
-    if (pathname === '/') {
-      mwLog('INFO', 'redirect', { pathname, destination: '/welcome', reason: 'unauthenticated_root' });
-      return NextResponse.redirect(new URL('/welcome', request.url));
-    }
+  if (!user && requiresAuthenticatedPage) {
     mwLog('WARN', 'redirect', { pathname, destination: '/login', reason: 'unauthenticated', authMethod });
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  if (user && requiresAuthenticatedPage) {
+    try {
+      const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalError) {
+        mwLog('WARN', 'mfa_aal_check_failed', {
+          pathname,
+          userId: user.id,
+          error: aalError.message,
+        });
+      } else if (requiresMfaChallenge(aalData)) {
+        const next = getPostAuthNext(pathname, request.nextUrl.search);
+        const destination = buildMfaRedirectPath(next);
+        mwLog('WARN', 'redirect', {
+          pathname,
+          destination,
+          reason: 'mfa_required',
+          userId: user.id,
+        });
+        return NextResponse.redirect(new URL(destination, request.url));
+      }
+    } catch (err) {
+      mwLog('WARN', 'mfa_aal_check_exception', {
+        pathname,
+        userId: user.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Fetch profile for verification + role checks
   // Try full query first; fall back to role-only if Sprint 12 columns not yet migrated
-  if (user && (authRequiredPaths.some(path => pathname.startsWith(path)) || pathname === pendingVerificationPath)) {
+  if (user && requiresAuthenticatedPage) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let profile: Record<string, any> | null = null;

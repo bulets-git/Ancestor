@@ -1,4 +1,4 @@
-﻿-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Gia Pháº£ Äiá»‡n Tá»­ - Database Setup
 -- Há» Äáº·ng lÃ ng Ká»· CÃ¡c
 -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -312,12 +312,13 @@ CREATE POLICY "Admins can update contributions" ON contributions
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (user_id, email, full_name, role)
+    INSERT INTO public.profiles (user_id, email, full_name, role, is_verified)
     VALUES (
         NEW.id,
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-        'viewer'
+        'viewer',
+        (COALESCE(NEW.raw_app_meta_data->>'provider', '') = 'google' OR NEW.raw_app_meta_data->'providers' @> '["google"]'::jsonb)
     );
     RETURN NEW;
 END;

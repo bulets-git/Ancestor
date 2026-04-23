@@ -74,7 +74,7 @@ export function RegisterMemberForm() {
           Sau khi được xét duyệt, bạn sẽ được thêm vào gia phả.
         </p>
         <div className="flex gap-3 justify-center">
-          <Link href="/welcome" className="text-sm text-primary hover:underline">
+          <Link href="/" className="text-sm text-primary hover:underline">
             Về trang chủ
           </Link>
           <span className="text-gray-300">|</span>
@@ -268,7 +268,7 @@ export function RegisterMemberForm() {
       </Card>
 
       <div className="flex flex-wrap gap-3 justify-center">
-        <Link href="/welcome" className="text-sm text-primary hover:underline">
+        <Link href="/" className="text-sm text-primary hover:underline">
           Trang chủ
         </Link>
         <span className="text-gray-300">|</span>

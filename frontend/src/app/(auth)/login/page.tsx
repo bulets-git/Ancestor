@@ -168,7 +168,10 @@ function OtpEmailForm({ onBack }: OtpStepProps) {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: otpEmail.trim(),
-        options: { shouldCreateUser: false },
+        options: { 
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
       if (error) {
         // shouldCreateUser=false → Supabase returns error for unregistered email
@@ -545,7 +548,7 @@ function LoginForm() {
                     const { error } = await supabase.auth.signInWithOAuth({
                       provider: 'google',
                       options: {
-                        redirectTo: `${window.location.origin}/`,
+                        redirectTo: `${window.location.origin}/auth/callback`,
                       },
                     });
                     if (error) throw error;

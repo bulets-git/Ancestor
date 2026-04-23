@@ -165,7 +165,7 @@ export function AncestralHallContent() {
 
       {/* Navigation */}
       <div className="flex flex-wrap gap-3 justify-center pt-4">
-        <Link href="/welcome" className="text-sm text-primary hover:underline">
+        <Link href="/" className="text-sm text-primary hover:underline">
           Trang chủ
         </Link>
         <span className="text-gray-300">|</span>

@@ -13,7 +13,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://ancestortree.info'
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: `${BASE_URL}/welcome`,
+      url: `${BASE_URL}/`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 1,
