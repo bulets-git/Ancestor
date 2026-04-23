@@ -436,6 +436,8 @@ export interface ClanSettings {
   ancestral_hall_history?: string;
   ceremony_schedule?: CeremonyScheduleItem[];
   login_config?: LoginConfig;
+  /** How many generations before DB generation=1. UI displays (gen + offset). Default 0. */
+  generation_offset?: number;
   updated_at: string;
   updated_by?: string;
 }

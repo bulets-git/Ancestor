@@ -292,6 +292,19 @@ export async function getPersonRelations(personId: string): Promise<PersonRelati
       .filter((r) => r.person_id !== personId)
       .map((r) => personMap.get(r.person_id))
       .filter(Boolean) as Person[];
+    
+    // Sort siblings by birth year/date
+    siblings.sort((a, b) => {
+      const yearA = a.birth_year || 9999;
+      const yearB = b.birth_year || 9999;
+      if (yearA !== yearB) return yearA - yearB;
+      if (a.birth_date && b.birth_date) {
+        if (a.birth_date < b.birth_date) return -1;
+        if (a.birth_date > b.birth_date) return 1;
+      }
+      return 0;
+    });
+
     parentFamilyResult = {
       family: parentFamily,
       father: parentFamily.father_id ? (personMap.get(parentFamily.father_id) || null) : null,
@@ -312,6 +325,19 @@ export async function getPersonRelations(personId: string): Promise<PersonRelati
     const familyChildren = (childrenByFamily.get(family.id) || [])
       .map((r) => personMap.get(r.person_id))
       .filter(Boolean) as Person[];
+
+    // Sort children by birth year/date
+    familyChildren.sort((a, b) => {
+      const yearA = a.birth_year || 9999;
+      const yearB = b.birth_year || 9999;
+      if (yearA !== yearB) return yearA - yearB;
+      if (a.birth_date && b.birth_date) {
+        if (a.birth_date < b.birth_date) return -1;
+        if (a.birth_date > b.birth_date) return 1;
+      }
+      return 0;
+    });
+
     return {
       family,
       spouse: spouseId ? (personMap.get(spouseId) || null) : null,

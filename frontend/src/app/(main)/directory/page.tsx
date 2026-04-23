@@ -245,14 +245,18 @@ export default function DirectoryPage() {
                             className="flex items-center gap-3 hover:underline"
                           >
                             <div
-                              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white ${
-                                person.gender === 1 ? 'bg-blue-500' : 'bg-pink-500'
+                              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ${
+                                !person.is_living 
+                                  ? 'bg-gray-600' 
+                                  : (person.gender === 1 ? 'bg-blue-500' : 'bg-pink-500')
                               }`}
                             >
                               {person.display_name.charAt(person.display_name.length - 1)}
                             </div>
                             <div>
-                              <div className="font-medium">{person.display_name}</div>
+                              <div className={`font-bold ${person.gender === 1 ? 'text-blue-600' : (person.gender === 2 ? 'text-pink-600' : '')}`}>
+                                {person.display_name}
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {person.gender === 1 ? 'Nam' : 'Nữ'}
                                 {!person.is_living && ' · Đã mất'}

@@ -32,31 +32,39 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, Plus, Search, UserPlus } from 'lucide-react';
 import type { Person, PersonRelations } from '@/types';
+import { useGenerationOffset, displayGen } from '@/hooks/use-generation-offset';
 
 // ─── PersonLink ───────────────────────────────────────────────────────────────
 
 function PersonLink({ person }: { person: Person }) {
+  const isMale = person.gender === 1;
+  const isFemale = person.gender === 2;
+  const isLiving = person.is_living;
+  const offset = useGenerationOffset();
+
+  let avatarBgClass = isMale ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700';
+  if (!isLiving) {
+    avatarBgClass = 'bg-gray-600 text-white';
+  }
+
+  const nameColorClass = isMale ? 'text-blue-600' : (isFemale ? 'text-pink-600' : '');
+
   return (
     <Link
       href={`/people/${person.id}`}
       className="flex items-center gap-2 hover:bg-muted rounded-md px-2 py-1 transition-colors group"
     >
-      <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-          person.gender === 1
-            ? 'bg-blue-100 text-blue-700'
-            : 'bg-pink-100 text-pink-700'
-        }`}
-      >
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${avatarBgClass}`}>
         {person.display_name.slice(-1)}
       </div>
-      <span className="text-sm group-hover:text-primary transition-colors">
+      <span className={`text-sm font-bold group-hover:opacity-80 transition-opacity ${nameColorClass}`}>
         {person.display_name}
       </span>
       {person.birth_year && (
         <span className="text-xs text-muted-foreground">({person.birth_year})</span>
       )}
-      {!person.is_living && <span className="text-xs text-muted-foreground">†</span>}
+      {!isLiving && <span className="text-xs text-muted-foreground">†</span>}
+      <span className="text-xs text-muted-foreground ml-auto">Đời {displayGen(person.generation, offset)}</span>
     </Link>
   );
 }
@@ -179,6 +187,7 @@ interface PersonSearchSelectProps {
 function PersonSearchSelect({ excludeIds = [], onSelect, isLoading }: PersonSearchSelectProps) {
   const [query, setQuery] = useState('');
   const { data: results, isFetching } = useSearchPeople(query);
+  const offset = useGenerationOffset();
 
   const filtered = (results || []).filter((p) => !excludeIds.includes(p.id));
 
@@ -207,16 +216,20 @@ function PersonSearchSelect({ excludeIds = [], onSelect, isLoading }: PersonSear
             className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted transition-colors disabled:opacity-50"
           >
             <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
-                person.gender === 1 ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                !person.is_living 
+                  ? 'bg-gray-600 text-white' 
+                  : (person.gender === 1 ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700')
               }`}
             >
               {person.display_name.slice(-1)}
             </div>
             <div>
-              <p className="text-sm font-medium">{person.display_name}</p>
+              <p className={`text-sm font-bold ${person.gender === 1 ? 'text-blue-600' : (person.gender === 2 ? 'text-pink-600' : '')}`}>
+                {person.display_name}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Đời {person.generation}{person.birth_year ? ` · ${person.birth_year}` : ''}
+                Đời {displayGen(person.generation, offset)}{person.birth_year ? ` · ${person.birth_year}` : ''}
               </p>
             </div>
           </button>

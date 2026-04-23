@@ -101,6 +101,14 @@ interface TreeConnectionData {
   isVisible: boolean;
 }
 
+interface TreeButtonData {
+  id: string;
+  x: number;
+  y: number;
+  isCollapsed: boolean;
+  personId: string;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Tree Node Component
 // ═══════════════════════════════════════════════════════════════════════════
@@ -130,18 +138,31 @@ function wrapName(name: string, charsPerLine = 18): [string, string | null] {
   return [line1, line2];
 }
 
-function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProps) {
-  const { person, x, y, isCollapsed, hasChildren } = node;
+function TreeNode({ node, onSelect, isSelected }: TreeNodeProps) {
+  const { person, x, y } = node;
 
   // Pure SVG — no foreignObject, so html2canvas / PDF serialisation works correctly
   const isMale = person.gender === 1;
+  const isFemale = person.gender === 2;
+  const isLiving = person.is_living;
+
   // Hardcoded hex colours (not CSS vars) so they survive SVG serialisation for PDF
   const nodeBg      = isMale ? '#eff6ff' : '#fff1f2';   // blue-50 / rose-50
   const nodeBorder  = isSelected ? '#6366f1' : (isMale ? '#93c5fd' : '#fda4af'); // indigo / blue-300 / rose-300
   const borderWidth = isSelected ? 2.5 : 1.5;
-  const avatarBg    = isMale ? '#bfdbfe' : '#fecdd3';   // blue-200 / rose-200
-  const textFill    = '#1f2937';  // gray-800
-  const mutedFill   = '#6b7280';  // gray-500
+  
+  // Avatar colors
+  let avatarBg = isMale ? '#bfdbfe' : '#fecdd3';   // blue-200 / rose-200
+  let initialsColor = isMale ? '#1e40af' : '#9d174d'; // blue-800 / rose-800
+  
+  if (!isLiving) {
+    avatarBg = '#4b5563'; // gray-600
+    initialsColor = '#ffffff'; // white
+  }
+
+  // Name colors
+  const nameColor = isMale ? '#2563eb' : (isFemale ? '#db2777' : '#1f2937'); // blue-600 / pink-600 / gray-800
+  const mutedFill = '#6b7280';  // gray-500
   const btnBorder   = isMale ? '#93c5fd' : '#fda4af';
 
   // Last word initial for avatar
@@ -158,10 +179,6 @@ function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProp
   const nameLine1Y = line2 ? y + 50 : y + 56; // shift down a bit when 1-line name
   const nameLine2Y = y + 65;
   const deadY      = y + NODE_HEIGHT - 9;
-
-  // Collapse button (centre at bottom edge of node)
-  const btnCY = y + NODE_HEIGHT;
-  const btnR  = 9;
 
   const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 
@@ -185,7 +202,7 @@ function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProp
       <circle cx={cx} cy={avatarCY} r={avatarR} fill={avatarBg}
         style={{ cursor: 'pointer' }} onClick={() => onSelect(person)} />
       <text x={cx} y={avatarCY + 5} textAnchor="middle"
-        fontSize={13} fontWeight="700" fill={textFill} fontFamily={FONT}
+        fontSize={13} fontWeight="700" fill={initialsColor} fontFamily={FONT}
         style={{ cursor: 'pointer', userSelect: 'none' }}
         onClick={() => onSelect(person)}>
         {initial}
@@ -193,7 +210,7 @@ function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProp
 
       {/* Name line 1 */}
       <text x={cx} y={nameLine1Y} textAnchor="middle"
-        fontSize={11} fontWeight="500" fill={textFill} fontFamily={FONT}
+        fontSize={11} fontWeight="700" fill={nameColor} fontFamily={FONT}
         style={{ cursor: 'pointer', userSelect: 'none' }}
         onClick={() => onSelect(person)}>
         {line1}
@@ -202,7 +219,7 @@ function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProp
       {/* Name line 2 (if any) */}
       {line2 && (
         <text x={cx} y={nameLine2Y} textAnchor="middle"
-          fontSize={11} fontWeight="500" fill={textFill} fontFamily={FONT}
+          fontSize={11} fontWeight="700" fill={nameColor} fontFamily={FONT}
           style={{ cursor: 'pointer', userSelect: 'none' }}
           onClick={() => onSelect(person)}>
           {line2}
@@ -224,20 +241,6 @@ function TreeNode({ node, onSelect, onToggleCollapse, isSelected }: TreeNodeProp
         <rect x={x - 3} y={y - 3} width={NODE_WIDTH + 6} height={NODE_HEIGHT + 6}
           rx={11} fill="none" stroke="#6366f1" strokeWidth={1.5}
           strokeDasharray="5 3" opacity={0.6} style={{ pointerEvents: 'none' }} />
-      )}
-
-      {/* Collapse / expand button */}
-      {hasChildren && (
-        <g style={{ cursor: 'pointer' }}
-          onClick={(e) => { e.stopPropagation(); onToggleCollapse(person.id); }}>
-          <circle cx={cx} cy={btnCY} r={btnR}
-            fill="white" stroke={btnBorder} strokeWidth={1.5} />
-          <text x={cx} y={btnCY + 5} textAnchor="middle"
-            fontSize={14} fontWeight="bold" fill={mutedFill} fontFamily={FONT}
-            style={{ userSelect: 'none' }}>
-            {isCollapsed ? '+' : '\u2212'}
-          </text>
-        </g>
       )}
     </motion.g>
   );
@@ -399,8 +402,19 @@ function buildTreeLayout(
     if (viewMode === 'all') {
       people.forEach((p) => visible.add(p.id));
       const hideDescendants = (personId: string) => {
-        const fams = fatherToFamilies.get(personId) || [];
-        for (const fam of fams) {
+        const asFatherFams = fatherToFamilies.get(personId) || [];
+        for (const fam of asFatherFams) {
+          if (fam.mother_id) visible.delete(fam.mother_id);
+          children
+            .filter((c) => c.family_id === fam.id)
+            .forEach((c) => {
+              visible.delete(c.person_id);
+              hideDescendants(c.person_id);
+            });
+        }
+        const asMotherFams = motherToFamilies.get(personId) || [];
+        for (const fam of asMotherFams) {
+          if (fam.father_id) visible.delete(fam.father_id);
           children
             .filter((c) => c.family_id === fam.id)
             .forEach((c) => {
@@ -448,13 +462,32 @@ function buildTreeLayout(
   }
 
   // Helpers
+  const personMap = new Map(people.map(p => [p.id, p]));
+
   const getVisibleChildrenAsFather = (personId: string): string[] => {
     const fams = fatherToFamilies.get(personId) || [];
     const result: string[] = [];
     for (const fam of fams) {
       children
         .filter((c) => c.family_id === fam.id && visibleIds.has(c.person_id) && !positionedAsWife.has(c.person_id))
-        .sort((a, b) => a.sort_order - b.sort_order)
+        .sort((a, b) => {
+          const pA = personMap.get(a.person_id);
+          const pB = personMap.get(b.person_id);
+          
+          // Sort by birth year (primary)
+          const yearA = pA?.birth_year || 9999;
+          const yearB = pB?.birth_year || 9999;
+          if (yearA !== yearB) return yearA - yearB;
+          
+          // Sort by birth date string if year is same (secondary)
+          if (pA?.birth_date && pB?.birth_date) {
+            if (pA.birth_date < pB.birth_date) return -1;
+            if (pA.birth_date > pB.birth_date) return 1;
+          }
+          
+          // Fallback to manual sort_order
+          return a.sort_order - b.sort_order;
+        })
         .forEach((c) => { if (!result.includes(c.person_id)) result.push(c.person_id); });
     }
     return result;
@@ -580,8 +613,9 @@ function buildTreeLayout(
     });
   }
 
-  // Build connections
+  // Build connections and buttons
   const connections: TreeConnectionData[] = [];
+  const buttons: TreeButtonData[] = [];
   const personPos = new Map(nodes.map((n) => [n.person.id, { x: n.x, y: n.y }]));
 
   for (const family of families) {
@@ -589,9 +623,7 @@ function buildTreeLayout(
     const motherPos = family.mother_id ? personPos.get(family.mother_id) : null;
     if (!fatherPos && !motherPos) continue;
 
-    // Couple line (horizontal, between adjacent nodes in the couple chain).
-    // For polygamy, subsequent wives are positioned further right, so each
-    // couple line covers only the COUPLE_GAP immediately to the left of the wife.
+    // Couple line
     if (fatherPos && motherPos) {
       connections.push({
         id: `couple-${family.id}`,
@@ -604,24 +636,41 @@ function buildTreeLayout(
       });
     }
 
-    const parentIsCollapsed =
-      (family.father_id && collapsedNodes.has(family.father_id)) ||
-      (!family.father_id && family.mother_id && collapsedNodes.has(family.mother_id));
-    if (parentIsCollapsed) continue;
+    const familyChildren = children.filter((c) => c.family_id === family.id);
+    if (familyChildren.length === 0) continue;
 
     const parentPos = fatherPos ?? motherPos!;
-    const familyCenterX =
-      fatherPos && motherPos
-        ? (fatherPos.x + NODE_WIDTH + motherPos.x) / 2
-        : parentPos.x + NODE_WIDTH / 2;
+    const parentPersonId = fatherPos ? family.father_id! : family.mother_id!;
+    if (!visibleIds.has(parentPersonId)) continue;
 
-    children.filter((c) => c.family_id === family.id).forEach((child) => {
+    const isCollapsed = collapsedNodes.has(parentPersonId);
+
+    const familyCenterX = fatherPos && motherPos
+      ? motherPos.x - COUPLE_GAP / 2
+      : parentPos.x + NODE_WIDTH / 2;
+
+    const familyStartY = fatherPos && motherPos
+      ? parentPos.y + NODE_HEIGHT / 2
+      : parentPos.y + NODE_HEIGHT;
+
+    // Add collapse/expand button
+    buttons.push({
+      id: `btn-${family.id}`,
+      x: familyCenterX,
+      y: familyStartY,
+      isCollapsed,
+      personId: parentPersonId,
+    });
+
+    if (isCollapsed) continue;
+
+    familyChildren.forEach((child) => {
       const childPos = personPos.get(child.person_id);
       if (childPos) {
         connections.push({
           id: `child-${family.id}-${child.person_id}`,
           x1: familyCenterX,
-          y1: parentPos.y + NODE_HEIGHT,
+          y1: familyStartY,
           x2: childPos.x + NODE_WIDTH / 2,
           y2: childPos.y,
           type: 'parent-child',
@@ -643,6 +692,7 @@ function buildTreeLayout(
   return {
     nodes,
     connections,
+    buttons,
     width: maxX - minX + 100,
     height: maxY + 50,
     offsetX: -minX + 50,
@@ -1187,10 +1237,44 @@ export function FamilyTree() {
                   <TreeNode
                     key={node.person.id}
                     node={node}
+                    isSelected={node.person.id === selectedPerson?.id}
                     onSelect={setSelectedPerson}
-                    onToggleCollapse={handleToggleCollapse}
-                    isSelected={selectedPerson?.id === node.person.id}
                   />
+                ))}
+              </AnimatePresence>
+
+              {/* Buttons */}
+              <AnimatePresence>
+                {layout.buttons.map((btn) => (
+                  <g
+                    key={btn.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleCollapse(btn.personId);
+                    }}
+                  >
+                    <circle
+                      cx={btn.x}
+                      cy={btn.y}
+                      r={9}
+                      fill="white"
+                      stroke="#9ca3af"
+                      strokeWidth={1.5}
+                    />
+                    <text
+                      x={btn.x}
+                      y={btn.y + 5}
+                      textAnchor="middle"
+                      fontSize={14}
+                      fontWeight="bold"
+                      fill="#6b7280"
+                      fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
+                      style={{ userSelect: 'none' }}
+                    >
+                      {btn.isCollapsed ? '+' : '\u2212'}
+                    </text>
+                  </g>
                 ))}
               </AnimatePresence>
             </g>

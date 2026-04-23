@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { type Person, getZodiacYear } from '@/types';
 import { User, MapPin, Calendar } from 'lucide-react';
+import { useGenerationOffset, displayGen } from '@/hooks/use-generation-offset';
 
 interface PersonCardProps {
   person: Person;
@@ -28,8 +29,23 @@ export function PersonCard({ person, showDetails = true }: PersonCardProps) {
     .join('')
     .toUpperCase();
 
-  const genderColor = person.gender === 1 ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800';
-  const statusColor = person.is_living ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
+  const isMale = person.gender === 1;
+  const isFemale = person.gender === 2;
+  const isLiving = person.is_living;
+
+  // Avatar styles
+  let avatarBgClass = isMale ? 'bg-blue-100' : 'bg-pink-100';
+  let avatarTextClass = isMale ? 'text-blue-800' : 'text-pink-800';
+  
+  if (!isLiving) {
+    avatarBgClass = 'bg-gray-600';
+    avatarTextClass = 'text-white';
+  }
+
+  // Name styles
+  const nameColorClass = isMale ? 'name-male' : (isFemale ? 'name-female' : '');
+  const statusBadgeColor = isLiving ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
+  const offset = useGenerationOffset();
 
   return (
     <Link href={`/people/${person.id}`}>
@@ -38,26 +54,28 @@ export function PersonCard({ person, showDetails = true }: PersonCardProps) {
           <div className="flex items-start gap-4">
             <Avatar className="h-14 w-14">
               <AvatarImage src={person.avatar_url} alt={person.display_name} />
-              <AvatarFallback className={genderColor}>
+              <AvatarFallback 
+                className={`${avatarBgClass} ${avatarTextClass} avatar-bold ${!isLiving ? 'avatar-deceased' : ''}`}
+              >
                 {initials || <User className="h-6 w-6" />}
               </AvatarFallback>
             </Avatar>
             
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-base truncate">
+              <h3 className={`text-base truncate ${nameColorClass}`}>
                 {person.display_name}
               </h3>
               
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 <Badge variant="outline" className="text-xs">
-                  Đời {person.generation}
+                  Đời {displayGen(person.generation, offset)}
                 </Badge>
                 {person.chi && (
                   <Badge variant="outline" className="text-xs">
                     Chi {person.chi}
                   </Badge>
                 )}
-                <Badge className={`text-xs ${statusColor}`}>
+                <Badge className={`text-xs ${statusBadgeColor}`}>
                   {person.is_living ? 'Còn sống' : 'Đã mất'}
                 </Badge>
               </div>

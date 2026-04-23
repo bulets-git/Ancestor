@@ -14,6 +14,7 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { useCanEditPerson } from '@/hooks/use-can-edit';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useGenerationOffset, displayGen } from '@/hooks/use-generation-offset';
 import { AvatarUpload } from '@/components/people/avatar-upload';
 import { PhotoGallery } from '@/components/people/photo-gallery';
 import { Button } from '@/components/ui/button';
@@ -61,6 +62,7 @@ export default function PersonDetailPage({ params }: PageProps) {
   const { data: canEdit = false } = useCanEditPerson(id);
   const isViewer = profile?.role === 'viewer';
   const isSelf = profile?.linked_person === id;
+  const genOffset = useGenerationOffset();
 
   const handleDelete = async () => {
     try {
@@ -129,9 +131,11 @@ export default function PersonDetailPage({ params }: PageProps) {
 
             <div className="flex-1">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                <h1 className="text-2xl font-bold">{person.display_name}</h1>
+                <h1 className={`text-2xl ${person.gender === 1 ? 'name-male' : (person.gender === 2 ? 'name-female' : 'font-bold')}`}>
+                  {person.display_name}
+                </h1>
                 <div className="flex gap-2">
-                  <Badge variant="outline">Đời {person.generation}</Badge>
+                  <Badge variant="outline">Đời {displayGen(person.generation, genOffset)}</Badge>
                   {person.chi && <Badge variant="outline">Chi {person.chi}</Badge>}
                   <Badge className={person.is_living ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
                     {person.is_living ? 'Còn sống' : 'Đã mất'}

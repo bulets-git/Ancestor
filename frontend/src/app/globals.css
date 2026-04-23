@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Force rebuild */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -124,6 +125,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom Gender & Status Styles */
+.name-male { color: #2563eb !important; font-weight: 700 !important; }
+.name-female { color: #db2777 !important; font-weight: 700 !important; }
+.avatar-deceased { background-color: #4b5563 !important; color: #ffffff !important; font-weight: 700 !important; }
+.avatar-bold { font-weight: 700 !important; }
 
 /* Elderly mode — larger fonts and touch targets for senior users */
 .elderly-mode {

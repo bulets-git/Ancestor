@@ -1,3 +1,4 @@
+// Trigger restart
 import type { NextConfig } from "next";
 
 // Standalone output required for Electron desktop builds AND Docker production.

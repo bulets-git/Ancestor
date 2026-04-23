@@ -61,6 +61,9 @@ export default function AdminSettingsPage() {
   // Login config
   const [loginMethods, setLoginMethods] = useState<LoginMethod[]>(['email_password', 'email_otp']);
   const [isSavingLogin, setIsSavingLogin] = useState(false);
+  // Generation offset
+  const [genOffset, setGenOffset] = useState(0);
+  const [isSavingOffset, setIsSavingOffset] = useState(false);
 
   useEffect(() => {
     if (!clanSettings) return;
@@ -79,6 +82,7 @@ export default function AdminSettingsPage() {
     setHallHistory(clanSettings.ancestral_hall_history ?? '');
     setCeremonies((clanSettings.ceremony_schedule as CeremonyScheduleItem[]) ?? []);
     setLoginMethods(clanSettings.login_config?.methods ?? ['email_password', 'email_otp']);
+    setGenOffset(clanSettings.generation_offset ?? 0);
   }, [clanSettings]);
 
   if (!isEditor) {
@@ -153,6 +157,22 @@ export default function AdminSettingsPage() {
       toast.error('Lỗi khi lưu cấu hình đăng nhập');
     } finally {
       setIsSavingLogin(false);
+    }
+  };
+
+  const handleSaveOffset = async () => {
+    if (!clanSettings) return;
+    setIsSavingOffset(true);
+    try {
+      await updateMutation.mutateAsync({
+        id: clanSettings.id,
+        input: { generation_offset: genOffset },
+      });
+      toast.success('Đã lưu cài đặt số đời');
+    } catch {
+      toast.error('Lỗi khi lưu');
+    } finally {
+      setIsSavingOffset(false);
     }
   };
 
@@ -503,6 +523,59 @@ export default function AdminSettingsPage() {
             >
               <Plus className="h-4 w-4 mr-1" />
               Thêm ngày lễ
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Generation Offset */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Cấu hình số đời (Generation Offset)
+          </CardTitle>
+          <CardDescription>
+            Khi phát hiện thêm tổ tiên trước đời 1, hãy tăng offset lên.
+            Toàn bộ số đời hiển thị sẽ tự động điều chỉnh mà không cần sửa dữ liệu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
+            <p className="font-medium">Ví dụ: Offset = {genOffset}</p>
+            <ul className="text-muted-foreground space-y-1">
+              <li>Người nhập DB = Đời 1 → Hiển thị: <strong>Đời {1 + genOffset}</strong></li>
+              <li>Người nhập DB = Đời 2 → Hiển thị: <strong>Đời {2 + genOffset}</strong></li>
+              <li>Tổ tiên mới thêm vào DB = Đời 1 → vẫn là <strong>Đời {1 + genOffset}</strong> (không đổi)</li>
+            </ul>
+            <p className="text-xs text-amber-600 mt-2">
+              ⚠️ Khi thêm tổ tiên mới trước đời 1: tăng offset lên 1, sau đó thêm người mới vào đời 1 trong DB.
+            </p>
+          </div>
+          <div className="flex items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="gen-offset">Số đời offset (mặc định: 0)</Label>
+              <Input
+                id="gen-offset"
+                type="number"
+                min={0}
+                max={50}
+                value={genOffset}
+                onChange={e => setGenOffset(parseInt(e.target.value) || 0)}
+                className="w-32"
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveOffset}
+              disabled={isSavingOffset || !clanSettings}
+            >
+              {isSavingOffset ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Đang lưu...</>
+              ) : (
+                <><Save className="h-4 w-4 mr-2" />Lưu offset</>
+              )}
             </Button>
           </div>
         </CardContent>

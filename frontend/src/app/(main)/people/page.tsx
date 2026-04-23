@@ -20,11 +20,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, Filter, Users, Plus, X } from 'lucide-react';
 import Link from 'next/link';
+import { useGenerationOffset, displayGen } from '@/hooks/use-generation-offset';
 
 export default function PeoplePage() {
   const { isEditor } = useAuth();
   const { data: people, isLoading, error } = usePeople();
   const { data: stats } = useStats();
+  const genOffset = useGenerationOffset();
   
   const [search, setSearch] = useState('');
   const [generationFilter, setGenerationFilter] = useState<string>('all');
@@ -134,7 +136,7 @@ export default function PeoplePage() {
                 <SelectItem value="all">Tất cả đời</SelectItem>
                 {generations.map(gen => (
                   <SelectItem key={gen} value={gen.toString()}>
-                    Đời {gen}
+                    Đời {displayGen(gen, genOffset)}
                   </SelectItem>
                 ))}
               </SelectContent>
