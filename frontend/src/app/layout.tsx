@@ -14,6 +14,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { CLAN_NAME, CLAN_FULL_NAME } from "@/lib/clan-config";
+import { DynamicTitle } from "@/components/layout/dynamic-title";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -47,6 +48,7 @@ export default function RootLayout({
         <QueryProvider>
           <AuthProvider>
             <TooltipProvider>
+              <DynamicTitle />
               {children}
               <Toaster />
             </TooltipProvider>

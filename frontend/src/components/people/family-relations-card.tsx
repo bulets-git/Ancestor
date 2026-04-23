@@ -8,13 +8,17 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   usePersonRelations,
   useCreateSpouseFamily,
   useAddChildToFamilyMutation,
+  useUpdateFamily,
+  useUpdateChild,
+  useRemoveChildFromFamily,
+  useAddPersonToParentFamily,
 } from '@/hooks/use-families';
 import { useSearchPeople, useCreatePerson } from '@/hooks/use-people';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,14 +33,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Plus, Search, UserPlus } from 'lucide-react';
-import type { Person, PersonRelations } from '@/types';
+import { Users, Plus, Search, UserPlus, Eye, Edit2, Trash2, MoreVertical } from 'lucide-react';
+import type { Person, Family, PersonRelations } from '@/types';
 import { useGenerationOffset, displayGen } from '@/hooks/use-generation-offset';
 
 // ─── PersonLink ───────────────────────────────────────────────────────────────
 
-function PersonLink({ person }: { person: Person }) {
+function PersonLink({ 
+  person, 
+  actions 
+}: { 
+  person: Person; 
+  actions?: React.ReactNode; 
+}) {
   const isMale = person.gender === 1;
   const isFemale = person.gender === 2;
   const isLiving = person.is_living;
@@ -50,24 +66,60 @@ function PersonLink({ person }: { person: Person }) {
   const nameColorClass = isMale ? 'text-blue-600' : (isFemale ? 'text-pink-600' : '');
 
   return (
-    <Link
-      href={`/people/${person.id}`}
-      className="flex items-center gap-2 hover:bg-muted rounded-md px-2 py-1 transition-colors group"
-    >
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${avatarBgClass}`}>
-        {person.display_name.slice(-1)}
-      </div>
-      <span className={`text-sm font-bold group-hover:opacity-80 transition-opacity ${nameColorClass}`}>
-        {person.display_name}
-      </span>
-      {person.birth_year && (
-        <span className="text-xs text-muted-foreground">({person.birth_year})</span>
-      )}
-      {!isLiving && <span className="text-xs text-muted-foreground">†</span>}
-      <span className="text-xs text-muted-foreground ml-auto">Đời {displayGen(person.generation, offset)}</span>
-    </Link>
+    <div className="flex items-center gap-1 group">
+      <Link
+        href={`/people/${person.id}`}
+        className="flex-1 flex items-center gap-2 hover:bg-muted rounded-md px-2 py-1 transition-colors"
+      >
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarBgClass}`}>
+          {person.display_name.slice(-1)}
+        </div>
+        <span className={`text-sm font-bold group-hover:opacity-80 transition-opacity ${nameColorClass}`}>
+          {person.display_name}
+        </span>
+        {person.birth_year && (
+          <span className="text-xs text-muted-foreground">({person.birth_year})</span>
+        )}
+        {!isLiving && <span className="text-xs text-muted-foreground">†</span>}
+        <span className="text-xs text-muted-foreground ml-auto">Đời {displayGen(person.generation, offset)}</span>
+      </Link>
+      {actions}
+    </div>
   );
 }
+
+function RelationActions({
+  personId,
+  canEdit,
+  onEdit,
+  onDelete,
+}: {
+  personId: string;
+  canEdit: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  return (
+    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Xem chi tiết">
+        <Link href={`/people/${personId}`}>
+          <Eye className="h-3.5 w-3.5" />
+        </Link>
+      </Button>
+      {canEdit && onEdit && (
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title="Sửa quan hệ">
+          <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+        </Button>
+      )}
+      {canEdit && onDelete && (
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onDelete} title="Xóa quan hệ">
+          <Trash2 className="h-3.5 w-3.5 text-red-600" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 
 // ─── QuickPersonForm ─────────────────────────────────────────────────────────
 
@@ -239,37 +291,44 @@ function PersonSearchSelect({ excludeIds = [], onSelect, isLoading }: PersonSear
   );
 }
 
-// ─── AddRelationDialog ────────────────────────────────────────────────────────
+// ─── RelationDialog ───────────────────────────────────────────────────────────
 
-type DialogMode = 'spouse' | 'child';
+type DialogMode = 'father' | 'mother' | 'spouse' | 'child';
 
-interface AddRelationDialogProps {
+interface RelationDialogProps {
   open: boolean;
   onClose: () => void;
   mode: DialogMode;
   currentPerson: Person;
-  targetFamilyId?: string; // for child mode: which family to add to
+  targetFamilyId?: string; // for child/spouse mode: which family to add to
+  isUpdate?: boolean;
+  oldPersonId?: string;
   onSuccess: () => void;
 }
 
-function AddRelationDialog({
+function RelationDialog({
   open,
   onClose,
   mode,
   currentPerson,
   targetFamilyId,
+  isUpdate = false,
+  oldPersonId,
   onSuccess,
-}: AddRelationDialogProps) {
+}: RelationDialogProps) {
   const [tab, setTab] = useState<'new' | 'existing'>('new');
   const [isSaving, setIsSaving] = useState(false);
   const createPersonMutation = useCreatePerson();
   const createSpouseFamilyMutation = useCreateSpouseFamily();
   const addChildMutation = useAddChildToFamilyMutation(currentPerson.id);
+  const updateFamilyMutation = useUpdateFamily();
+  const updateChildMutation = useUpdateChild();
+  const addPersonToParentFamilyMutation = useAddPersonToParentFamily();
 
-  const defaultGender: 1 | 2 = mode === 'spouse'
+  const defaultGender: 1 | 2 = (mode === 'spouse' || mode === 'mother')
     ? (currentPerson.gender === 1 ? 2 : 1)
     : 1;
-  const defaultGeneration = mode === 'spouse'
+  const defaultGeneration = (mode === 'spouse' || mode === 'father' || mode === 'mother')
     ? currentPerson.generation
     : currentPerson.generation + 1;
 
@@ -291,25 +350,7 @@ function AddRelationDialog({
         privacy_level: 0,
       });
 
-      if (mode === 'spouse') {
-        await createSpouseFamilyMutation.mutateAsync({
-          personId: currentPerson.id,
-          personGender: currentPerson.gender,
-          spouseId: newPerson.id,
-        });
-      } else if (targetFamilyId) {
-        await addChildMutation.mutateAsync({
-          familyId: targetFamilyId,
-          childPersonId: newPerson.id,
-          sortOrder: 99,
-        });
-      } else {
-        throw new Error('Thiếu thông tin gia đình để thêm con');
-      }
-
-      toast.success(mode === 'spouse' ? 'Đã thêm vợ/chồng' : 'Đã thêm con');
-      onSuccess();
-      onClose();
+      await handleSelectExisting(newPerson);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Lỗi khi lưu');
     } finally {
@@ -320,23 +361,47 @@ function AddRelationDialog({
   const handleSelectExisting = async (person: Person) => {
     setIsSaving(true);
     try {
-      if (mode === 'spouse') {
-        await createSpouseFamilyMutation.mutateAsync({
-          personId: currentPerson.id,
-          personGender: currentPerson.gender,
-          spouseId: person.id,
-        });
-      } else if (targetFamilyId) {
-        await addChildMutation.mutateAsync({
-          familyId: targetFamilyId,
-          childPersonId: person.id,
-          sortOrder: 99,
-        });
+      if (isUpdate) {
+        if (mode === 'child') {
+          if (!targetFamilyId || !oldPersonId) throw new Error('Thiếu thông tin cập nhật con');
+          await updateChildMutation.mutateAsync({
+            familyId: targetFamilyId,
+            oldPersonId: oldPersonId,
+            newPersonId: person.id,
+          });
+        } else if (mode === 'father' || mode === 'mother' || mode === 'spouse') {
+          if (!targetFamilyId) throw new Error('Thiếu thông tin gia đình');
+          const field = mode === 'father' ? 'father_id' : (mode === 'mother' ? 'mother_id' : (currentPerson.gender === 1 ? 'mother_id' : 'father_id'));
+          await updateFamilyMutation.mutateAsync({
+            id: targetFamilyId,
+            input: { [field]: person.id },
+          });
+        }
       } else {
-        throw new Error('Thiếu thông tin gia đình để thêm con');
+        // Create mode
+        if (mode === 'spouse') {
+          await createSpouseFamilyMutation.mutateAsync({
+            personId: currentPerson.id,
+            personGender: currentPerson.gender,
+            spouseId: person.id,
+          });
+        } else if (mode === 'child') {
+          if (!targetFamilyId) throw new Error('Thiếu thông tin gia đình để thêm con');
+          await addChildMutation.mutateAsync({
+            familyId: targetFamilyId,
+            childPersonId: person.id,
+            sortOrder: 99,
+          });
+        } else if (mode === 'father' || mode === 'mother') {
+          await addPersonToParentFamilyMutation.mutateAsync({
+            fatherId: mode === 'father' ? person.id : null,
+            motherId: mode === 'mother' ? person.id : null,
+            childPersonId: currentPerson.id,
+          });
+        }
       }
 
-      toast.success(mode === 'spouse' ? 'Đã liên kết vợ/chồng' : 'Đã liên kết con');
+      toast.success(isUpdate ? 'Đã cập nhật quan hệ' : 'Đã thêm quan hệ');
       onSuccess();
       onClose();
     } catch (err) {
@@ -346,9 +411,16 @@ function AddRelationDialog({
     }
   };
 
-  const title = mode === 'spouse'
-    ? `Thêm ${currentPerson.gender === 1 ? 'vợ' : 'chồng'} cho ${currentPerson.display_name}`
-    : `Thêm con cho ${currentPerson.display_name}`;
+  const modeLabel = {
+    father: 'cha',
+    mother: 'mẹ',
+    spouse: currentPerson.gender === 1 ? 'vợ' : 'chồng',
+    child: 'con',
+  }[mode];
+
+  const title = isUpdate
+    ? `Sửa ${modeLabel} cho ${currentPerson.display_name}`
+    : `Thêm ${modeLabel} cho ${currentPerson.display_name}`;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -380,7 +452,7 @@ function AddRelationDialog({
 
           <TabsContent value="existing" className="mt-4">
             <PersonSearchSelect
-              excludeIds={[currentPerson.id]}
+              excludeIds={[currentPerson.id, ...(oldPersonId ? [oldPersonId] : [])]}
               onSelect={handleSelectExisting}
               isLoading={isSaving}
             />
@@ -391,24 +463,36 @@ function AddRelationDialog({
   );
 }
 
+
 // ─── FamilySection ────────────────────────────────────────────────────────────
 
 interface OwnFamilySectionProps {
-  familyEntry: PersonRelations['ownFamilies'][0];
+  family: Family;
+  spouse: Person | null;
+  children: Array<{ person: Person; familyId: string }>;
   currentPerson: Person;
   canEdit: boolean;
   index: number;
   onAddChild: (familyId: string) => void;
+  onEditSpouse: (familyId: string, spouseId: string) => void;
+  onDeleteSpouse: (familyId: string, spouseName: string) => void;
+  onEditChild: (familyId: string, childId: string) => void;
+  onDeleteChild: (familyId: string, childId: string, childName: string) => void;
 }
 
 function OwnFamilySection({
-  familyEntry,
+  family,
+  spouse,
+  children,
   currentPerson,
   canEdit,
   index,
   onAddChild,
+  onEditSpouse,
+  onDeleteSpouse,
+  onEditChild,
+  onDeleteChild,
 }: OwnFamilySectionProps) {
-  const { family, spouse, children } = familyEntry;
   const spouseLabel = currentPerson.gender === 1 ? 'Vợ' : 'Chồng';
 
   return (
@@ -426,9 +510,27 @@ function OwnFamilySection({
           )}
         </p>
         {spouse ? (
-          <PersonLink person={spouse} />
+          <PersonLink 
+            person={spouse} 
+            actions={
+              <RelationActions
+                personId={spouse.id}
+                canEdit={canEdit}
+                onEdit={() => onEditSpouse(family.id, spouse.id)}
+                onDelete={() => onDeleteSpouse(family.id, spouse.display_name)}
+              />
+            }
+          />
         ) : (
-          <p className="text-sm text-muted-foreground px-2">Chưa rõ</p>
+          <div className="flex items-center justify-between px-2">
+            <p className="text-sm text-muted-foreground">Chưa rõ</p>
+            {canEdit && (
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onEditSpouse(family.id, '')}>
+                <Plus className="h-3 w-3 mr-1" />
+                Thêm {spouseLabel.toLowerCase()}
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -452,8 +554,19 @@ function OwnFamilySection({
         </div>
         {children.length > 0 ? (
           <div className="space-y-0.5">
-            {children.map((child) => (
-              <PersonLink key={child.id} person={child} />
+            {children.map(({ person: child, familyId }) => (
+              <PersonLink 
+                key={child.id} 
+                person={child} 
+                actions={
+                  <RelationActions
+                    personId={child.id}
+                    canEdit={canEdit}
+                    onEdit={() => onEditChild(familyId, child.id)}
+                    onDelete={() => onDeleteChild(familyId, child.id, child.display_name)}
+                  />
+                }
+              />
             ))}
           </div>
         ) : (
@@ -464,6 +577,7 @@ function OwnFamilySection({
   );
 }
 
+
 // ─── FamilyRelationsCard ──────────────────────────────────────────────────────
 
 interface FamilyRelationsCardProps {
@@ -473,23 +587,127 @@ interface FamilyRelationsCardProps {
 
 export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProps) {
   const { data: relations, isLoading, refetch } = usePersonRelations(person.id);
+  const ownFamilies = relations?.ownFamilies || [];
+
+  // Merge families with the same spouse to avoid duplicate entries (e.g. if children were added across multiple family records)
+  const mergedOwnFamilies = useMemo(() => {
+    if (!ownFamilies.length) return [];
+    
+    const groups: Map<string, {
+      family: Family;
+      spouse: Person | null;
+      children: Array<{ person: Person; familyId: string }>;
+    }> = new Map();
+    
+    ownFamilies.forEach(entry => {
+      const spouseId = entry.spouse?.id;
+      // Key by spouse ID, or by family ID if spouse is unknown
+      const key = spouseId || `unknown-${entry.family.id}`;
+      
+      if (groups.has(key)) {
+        const group = groups.get(key)!;
+        group.children.push(...entry.children.map(c => ({ person: c, familyId: entry.family.id })));
+      } else {
+        groups.set(key, {
+          family: entry.family,
+          spouse: entry.spouse,
+          children: entry.children.map(c => ({ person: c, familyId: entry.family.id }))
+        });
+      }
+    });
+    
+    const result = Array.from(groups.values());
+    result.forEach(group => {
+      // Sort children by birth year for a cleaner display
+      group.children.sort((a, b) => (a.person.birth_year || 9999) - (b.person.birth_year || 9999));
+    });
+    
+    return result;
+  }, [ownFamilies]);
+
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
   const [targetFamilyId, setTargetFamilyId] = useState<string | undefined>();
+  const [isUpdate, setIsUpdate] = useState(false);
+  const [oldPersonId, setOldPersonId] = useState<string | undefined>();
 
-  const openSpouseDialog = () => {
-    setDialogMode('spouse');
+  const removeChildMutation = useRemoveChildFromFamily();
+  const updateFamilyMutation = useUpdateFamily();
+
+  const openAddFatherDialog = () => {
+    setDialogMode('father');
     setTargetFamilyId(undefined);
+    setIsUpdate(false);
+    setOldPersonId(undefined);
   };
 
-  const openChildDialog = (familyId: string) => {
+  const openAddMotherDialog = () => {
+    setDialogMode('mother');
+    setTargetFamilyId(undefined);
+    setIsUpdate(false);
+    setOldPersonId(undefined);
+  };
+
+  const openAddSpouseDialog = () => {
+    setDialogMode('spouse');
+    setTargetFamilyId(undefined);
+    setIsUpdate(false);
+    setOldPersonId(undefined);
+  };
+
+  const openAddChildDialog = (familyId: string) => {
     setDialogMode('child');
     setTargetFamilyId(familyId);
+    setIsUpdate(false);
+    setOldPersonId(undefined);
+  };
+
+  const openUpdateRelationDialog = (mode: DialogMode, familyId: string, personId: string) => {
+    setDialogMode(mode);
+    setTargetFamilyId(familyId);
+    setIsUpdate(true);
+    setOldPersonId(personId);
   };
 
   const closeDialog = () => {
     setDialogMode(null);
     setTargetFamilyId(undefined);
+    setIsUpdate(false);
+    setOldPersonId(undefined);
   };
+
+  const handleDeleteChild = async (familyId: string, childId: string, childName: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${childName} khỏi danh sách con của ${person.display_name}?`)) {
+      return;
+    }
+
+    try {
+      await removeChildMutation.mutateAsync({ familyId, personId: childId });
+      toast.success(`Đã xóa ${childName}`);
+      refetch();
+    } catch (err) {
+      toast.error('Lỗi khi xóa: ' + (err instanceof Error ? err.message : ''));
+    }
+  };
+
+  const handleDeleteRelation = async (mode: 'father' | 'mother' | 'spouse', familyId: string, name: string) => {
+    const label = mode === 'father' ? 'cha' : (mode === 'mother' ? 'mẹ' : (person.gender === 1 ? 'vợ' : 'chồng'));
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${name} khỏi quan hệ ${label} của ${person.display_name}?`)) {
+      return;
+    }
+
+    try {
+      const field = mode === 'father' ? 'father_id' : (mode === 'mother' ? 'mother_id' : (person.gender === 1 ? 'mother_id' : 'father_id'));
+      await updateFamilyMutation.mutateAsync({
+        id: familyId,
+        input: { [field]: null },
+      });
+      toast.success(`Đã xóa quan hệ ${label}`);
+      refetch();
+    } catch (err) {
+      toast.error('Lỗi khi xóa: ' + (err instanceof Error ? err.message : ''));
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -509,7 +727,7 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
     );
   }
 
-  const { parentFamily, ownFamilies } = relations || { parentFamily: null, ownFamilies: [] };
+  const { parentFamily } = relations || { parentFamily: null };
 
   return (
     <>
@@ -521,7 +739,7 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
               Quan hệ gia đình
             </CardTitle>
             {canEdit && (
-              <Button variant="outline" size="sm" onClick={openSpouseDialog}>
+              <Button variant="outline" size="sm" onClick={openAddSpouseDialog}>
                 <Plus className="h-4 w-4 mr-1" />
                 Thêm vợ/chồng
               </Button>
@@ -530,7 +748,7 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Parents section */}
-          {parentFamily && (
+          {parentFamily ? (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -538,9 +756,27 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
                     Cha
                   </p>
                   {parentFamily.father ? (
-                    <PersonLink person={parentFamily.father} />
+                    <PersonLink 
+                      person={parentFamily.father} 
+                      actions={
+                        <RelationActions
+                          personId={parentFamily.father.id}
+                          canEdit={canEdit}
+                          onEdit={() => openUpdateRelationDialog('father', parentFamily.family.id, parentFamily.father!.id)}
+                          onDelete={() => handleDeleteRelation('father', parentFamily.family.id, parentFamily.father!.display_name)}
+                        />
+                      }
+                    />
                   ) : (
-                    <p className="text-sm text-muted-foreground px-2">Chưa rõ</p>
+                    <div className="flex items-center justify-between px-2">
+                      <p className="text-sm text-muted-foreground">Chưa rõ</p>
+                      {canEdit && (
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openUpdateRelationDialog('father', parentFamily.family.id, '')}>
+                          <Plus className="h-3 w-3 mr-1" />
+                          Thêm cha
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div>
@@ -548,9 +784,27 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
                     Mẹ
                   </p>
                   {parentFamily.mother ? (
-                    <PersonLink person={parentFamily.mother} />
+                    <PersonLink 
+                      person={parentFamily.mother} 
+                      actions={
+                        <RelationActions
+                          personId={parentFamily.mother.id}
+                          canEdit={canEdit}
+                          onEdit={() => openUpdateRelationDialog('mother', parentFamily.family.id, parentFamily.mother!.id)}
+                          onDelete={() => handleDeleteRelation('mother', parentFamily.family.id, parentFamily.mother!.display_name)}
+                        />
+                      }
+                    />
                   ) : (
-                    <p className="text-sm text-muted-foreground px-2">Chưa rõ</p>
+                    <div className="flex items-center justify-between px-2">
+                      <p className="text-sm text-muted-foreground">Chưa rõ</p>
+                      {canEdit && (
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openUpdateRelationDialog('mother', parentFamily.family.id, '')}>
+                          <Plus className="h-3 w-3 mr-1" />
+                          Thêm mẹ
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -563,7 +817,18 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
                   </p>
                   <div className="space-y-0.5">
                     {parentFamily.siblings.map((sib) => (
-                      <PersonLink key={sib.id} person={sib} />
+                      <PersonLink 
+                        key={sib.id} 
+                        person={sib} 
+                        actions={
+                          <RelationActions
+                            personId={sib.id}
+                            canEdit={canEdit}
+                            onEdit={() => openUpdateRelationDialog('child', parentFamily.family.id, sib.id)}
+                            onDelete={() => handleDeleteChild(parentFamily.family.id, sib.id, sib.display_name)}
+                          />
+                        }
+                      />
                     ))}
                   </div>
                 </div>
@@ -571,25 +836,46 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
 
               <Separator />
             </div>
-          )}
-
-          {!parentFamily && (
-            <div className="text-sm text-muted-foreground">
-              Chưa có thông tin cha/mẹ
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Cha/Mẹ
+                </p>
+                {canEdit && (
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={openAddFatherDialog}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      Thêm cha
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={openAddMotherDialog}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      Thêm mẹ
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground px-2">Chưa có thông tin cha/mẹ</p>
             </div>
           )}
 
           {/* Own families (spouse + children) */}
-          {ownFamilies.length > 0 ? (
+          {mergedOwnFamilies.length > 0 ? (
             <div className="space-y-4">
-              {ownFamilies.map((familyEntry, idx) => (
+              {mergedOwnFamilies.map((group, idx) => (
                 <OwnFamilySection
-                  key={familyEntry.family.id}
-                  familyEntry={familyEntry}
+                  key={group.spouse?.id || group.family.id}
+                  family={group.family}
+                  spouse={group.spouse}
+                  children={group.children}
                   currentPerson={person}
                   canEdit={canEdit}
                   index={idx}
-                  onAddChild={openChildDialog}
+                  onAddChild={openAddChildDialog}
+                  onEditSpouse={openUpdateRelationDialog.bind(null, 'spouse')}
+                  onDeleteSpouse={(fid, name) => handleDeleteRelation('spouse', fid, name)}
+                  onEditChild={openUpdateRelationDialog.bind(null, 'child')}
+                  onDeleteChild={handleDeleteChild}
                 />
               ))}
             </div>
@@ -608,15 +894,18 @@ export function FamilyRelationsCard({ person, canEdit }: FamilyRelationsCardProp
 
       {/* Dialog */}
       {dialogMode && (
-        <AddRelationDialog
+        <RelationDialog
           open={true}
           onClose={closeDialog}
           mode={dialogMode}
           currentPerson={person}
           targetFamilyId={targetFamilyId}
+          isUpdate={isUpdate}
+          oldPersonId={oldPersonId}
           onSuccess={() => refetch()}
         />
       )}
     </>
   );
 }
+

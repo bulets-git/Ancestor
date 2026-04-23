@@ -208,6 +208,28 @@ export async function removeChildFromFamily(familyId: string, personId: string):
   if (error) throw error;
 }
 
+export async function updateFamily(id: string, input: Partial<Omit<Family, 'id' | 'created_at' | 'updated_at'>>): Promise<Family> {
+  const { data, error } = await supabase
+    .from('families')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function updateChild(familyId: string, oldPersonId: string, newPersonId: string): Promise<void> {
+  const { error } = await supabase
+    .from('children')
+    .update({ person_id: newPersonId })
+    .eq('family_id', familyId)
+    .eq('person_id', oldPersonId);
+  
+  if (error) throw error;
+}
+
 // ─── Person Relations ─────────────────────────────────────────────────────────
 
 export async function getPersonRelations(personId: string): Promise<PersonRelations> {

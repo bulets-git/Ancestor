@@ -20,6 +20,8 @@ import {
   getPersonRelations,
   addPersonToParentFamily,
   createSpouseFamily,
+  updateFamily,
+  updateChild,
 } from '@/lib/supabase-data';
 import type { Family } from '@/types';
 
@@ -176,6 +178,31 @@ export function useAddChildToFamilyMutation(personId?: string) {
       if (personId) {
         queryClient.invalidateQueries({ queryKey: familyKeys.relations(personId) });
       }
+    },
+  });
+}
+
+export function useUpdateFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<Omit<Family, 'id' | 'created_at' | 'updated_at'>> }) =>
+      updateFamily(id, input),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: familyKeys.all });
+      queryClient.invalidateQueries({ queryKey: familyKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: familyKeys.tree() });
+    },
+  });
+}
+
+export function useUpdateChild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ familyId, oldPersonId, newPersonId }: { familyId: string; oldPersonId: string; newPersonId: string }) =>
+      updateChild(familyId, oldPersonId, newPersonId),
+    onSuccess: (_, { familyId }) => {
+      queryClient.invalidateQueries({ queryKey: familyKeys.children(familyId) });
+      queryClient.invalidateQueries({ queryKey: familyKeys.tree() });
     },
   });
 }
