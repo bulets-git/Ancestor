@@ -15,6 +15,7 @@
     "local:stop": "supabase stop",
     "local:reset": "supabase db reset"
   },
+  "packageManager": "pnpm@10.33.1",
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@supabase/ssr": "^0.8.0",
